@@ -1,3 +1,3 @@
-# tiny-merge
+# Tick network server
 
-State-based CRDT with a Tiny footprint.
+A demo of a server that sends messages at a regular interval.
