@@ -1,6 +1,7 @@
 import { WebSocketServer } from 'ws'
 import { encode, decode } from 'messagepack'
 import { nanoid } from 'nanoid'
+import { performance } from 'perf_hooks'
 import { heartbeat } from './utils.js'
 import MessageLists, { createMessage } from './messages.js'
 
@@ -24,7 +25,8 @@ export class Server {
 		    client.latestSeq = messageList.seq
         client.latestAck = messageList.serverSeq
         // messageList.delay
-        client.lastReceived = Date.now()
+        // client.lastReceived = Date.now()
+        client.lastReceived = performance.now()
 
 		    const messages = messageList.messages
 
@@ -107,7 +109,8 @@ export class Server {
       const messages = this.messageLists.getMessages(client.id)
       try {
         // this.latestSeq++
-        const delay = client.lastReceived ? Date.now() - client.lastReceived : 0
+        // const delay = client.lastReceived ? Date.now() - client.lastReceived : 0
+        const delay = client.lastReceived ? performance.now() - client.lastReceived : 0
 
         client.latestServerSeq++
 			  const messageList = {
