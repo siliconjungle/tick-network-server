@@ -15,7 +15,7 @@ export class Server {
     this.clients = new Map()
 
     this.wss.on('connection', (ws, req) => {
-      const client = { ws, id: nanoid(), latestSeq: -1, latestServerSeq: -1, latestAck: -1 }
+      const client = { ws, id: nanoid(), latestSeq: -1, latestServerSeq: -1, latestAck: -1, lastReceived: null }
       this.addClient(client)
 
       ws.on('message', (data) => {
@@ -23,6 +23,9 @@ export class Server {
 
 		    client.latestSeq = messageList.seq
         client.latestAck = messageList.serverSeq
+        // messageList.delay
+        client.lastReceived = Date.now()
+
 		    const messages = messageList.messages
 
         // const messages = decode(data)
@@ -104,11 +107,14 @@ export class Server {
       const messages = this.messageLists.getMessages(client.id)
       try {
         // this.latestSeq++
+        const delay = client.lastReceived ? Date.now() - client.lastReceived : 0
+
         client.latestServerSeq++
 			  const messageList = {
 				  seq: client.latestSeq,
 				  serverSeq: client.latestServerSeq,
 				  messages: messages,
+          delay,
 			  }
 			  ws.send(encode(messageList))
 
