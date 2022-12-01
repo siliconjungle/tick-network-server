@@ -15,11 +15,17 @@ export class Server {
     this.clients = new Map()
 
     this.wss.on('connection', (ws, req) => {
-      const client = { ws, id: nanoid() }
+      const client = { ws, id: nanoid(), latestSeq: -1, latestServerSeq: -1, latestAck: -1 }
       this.addClient(client)
 
       ws.on('message', (data) => {
-        const messages = decode(data)
+        const messageList = decode(data)
+
+		    client.latestSeq = messageList.seq
+        client.latestAck = messageList.serverSeq
+		    const messages = messageList.messages
+
+        // const messages = decode(data)
 
         for (const message of messages) {
           this.handleMessage(client, message)
@@ -27,12 +33,14 @@ export class Server {
       })
 
       ws.on('close', () => {
+        console.log('_CLOSE_')
         this.removeClient(client)
       })
     })
   }
 
   start() {
+    console.log('_START_')
     if (this.running === false) {
       this.running = true
       heartbeat(() => {
@@ -43,10 +51,13 @@ export class Server {
   }
 
   stop() {
+    console.log('_STOP_')
     this.running = false
   }
 
   addClient(client) {
+    console.log('_ADD_CLIENT_')
+    console.log(this.clients.size)
     if (this.clients.size === 0) {
       this.start()
     }
@@ -55,6 +66,7 @@ export class Server {
   }
 
   removeClient(client) {
+    console.log('_REMOVE_CLIENT_')
     this.messageLists.removeMessageList(client.id)
     this.clients.delete(client.ws)
 
@@ -91,7 +103,16 @@ export class Server {
     for (const [ws, client] of this.clients) {
       const messages = this.messageLists.getMessages(client.id)
       try {
-        ws.send(encode(messages))
+        // this.latestSeq++
+        client.latestServerSeq++
+			  const messageList = {
+				  seq: client.latestSeq,
+				  serverSeq: client.latestServerSeq,
+				  messages: messages,
+			  }
+			  ws.send(encode(messageList))
+
+        // ws.send(encode(messages))
         this.messageLists.clearMessages(client.id)
       } catch (err) {
         this.removeClient(session)
