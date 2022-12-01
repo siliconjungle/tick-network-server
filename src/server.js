@@ -4,12 +4,14 @@ import { nanoid } from 'nanoid'
 import { performance } from 'perf_hooks'
 import { heartbeat } from './utils.js'
 import MessageLists, { createMessage } from './messages.js'
+import Kernal from './kernal.js'
 
 const SEND_RATE = 33.333
 
 export class Server {
   messageLists = new MessageLists()
   running = false
+  kernal = new Kernal()
 
   constructor(expressServer) {
     this.wss = new WebSocketServer({ server: expressServer })
@@ -68,11 +70,13 @@ export class Server {
     }
     this.clients.set(client.ws, client)
     this.messageLists.addMessageList(client.id)
+    this.handleConnect(client)
   }
 
   removeClient(client) {
     console.log('_REMOVE_CLIENT_')
     this.messageLists.removeMessageList(client.id)
+    this.handleDisconnect(client)
     this.clients.delete(client.ws)
 
     if (this.clients.size === 0) {
@@ -80,26 +84,60 @@ export class Server {
     }
   }
 
+  handleConnect(client) {
+    console.log('_HANDLE_CONNECT_')
+    this.messageLists.addMessageToAllExcluding(
+      client.id,
+      createMessage.connected(client.id)
+    )
+    const snapshotOps = this.kernal.getSnapshotOps()
+    console.log('_SNAPSHOT_OPS_', JSON.stringify(snapshotOps, null, 2))
+    if (snapshotOps.length > 0) {
+      this.messageLists.addMessage(client.id, createMessage.patch(snapshotOps))
+    }
+  }
+
+  handleDisconnect(client) {
+    console.log('_HANDLE_DISCONNECT_')
+    this.messageLists.addMessageToAllExcluding(
+      client.id,
+      createMessage.disconnected(client.id)
+    )
+  }
+
+  // The client doesn't really need to send a *connect* or *disconnect* message.
+  // They should happen automatically.
   handleMessage(client, message) {
     const { type } = message
 
     switch (type) {
-      case 'connect':
-        // This should only happen if the agent isn't already connected.
-        this.messageLists.addMessageToAllExcluding(
-          client.id,
-          createMessage.connected(client.id)
-        )
-        break
-      case 'disconnect':
-        // This should only happen if the agent isn't already connected.
-        this.messageLists.addMessageToAllExcluding(
-          client.id,
-          createMessage.disconnected(client.id)
-        )
-        break
+      // case 'connect':
+      //   // This should only happen if the agent isn't already connected.
+      //   this.messageLists.addMessageToAllExcluding(
+      //     client.id,
+      //     createMessage.connected(client.id)
+      //   )
+      //   const snapshotOps = this.kernal.getSnapshotOps()
+      //   if (snapshotOps.length > 0) {
+      //     this.messageLists.addMessage(client.id, createMessage.patch(snapshotOps))
+      //   }
+      //   break
+      // case 'disconnect':
+      //   // This should only happen if the agent isn't already connected.
+      //   this.messageLists.addMessageToAllExcluding(
+      //     client.id,
+      //     createMessage.disconnected(client.id)
+      //   )
+      //   break
       case 'patch':
-        // This is where it needs to talk to the kernal.
+        // Validation should be done to the ops first.
+        const appliedOps = this.kernal.applyOps(message.ops)
+        if (appliedOps.length > 0) {
+          this.messageLists.addMessageToAllExcluding(
+            client.id,
+            createMessage.patch(appliedOps)
+          )
+        }
         break
     }
   }
